@@ -1,10 +1,8 @@
-use std::cmp::{min, max};
-
-use bevy::prelude::*;
-use bevy::sprite::MaterialMesh2dBundle;
 use core::convert::TryInto;
+use std::cmp::min;
 
-use rand::{distributions::Alphanumeric, Rng};
+use bevy::{prelude::*, reflect::Enum};
+use rand::{distributions::Uniform, Rng};
 
 extern crate derive_more;
 #[macro_use]
@@ -13,8 +11,7 @@ use derive_more::TryInto;
 
 lazy_static! {
     static ref TILE_STYLE: Style = Style {
-        size: Size::new(Val::Percent(90.0), Val::Percent(90.0)),
-        //size: Size::AUTO,
+        size: Size::new(Val::Percent(96.0), Val::Percent(96.0)),
         margin: UiRect::all(Val::Percent(4.0)),
         justify_content: JustifyContent::Center,
         align_items: AlignItems::Center,
@@ -27,9 +24,10 @@ lazy_static! {
     };
 }
 
-// stupid, distinctive tag to use
+// "Tag component" to figure out where in the NodeBundle tree the game board
+// entity actually lives
 #[derive(Component)]
-struct Grimbo {}
+struct GameBoard;
 
 /// A tile on the Werdol board
 #[derive(Component, Clone, Copy, TryInto, Debug)]
@@ -53,7 +51,7 @@ impl Default for Tile {
 }
 
 impl Tile {
-    // Forget a prposed character for this tile.
+    // Forget a proposed character for this tile.
     fn delete(&mut self) {
         *self = Self::Blank
     }
@@ -77,8 +75,9 @@ impl Tile {
     // Ask a tile how it should be displayed
     fn color(&self) -> Color {
         match self {
-            Self::Correct(_)   => Color::GREEN,
-            Self::Misplaced(_) => Color::YELLOW,
+            Self::Correct(_)   => Color::rgb(0.0, 0.5, 0.0),
+            Self::Misplaced(_) => Color::rgb(0.5, 0.5, 0.0),
+            Self::Missing(_)   => Color::rgb(0.25, 0.25, 0.25),
             _                  => Color::GRAY
         }
     }
@@ -101,19 +100,29 @@ impl Tile {
             .try_into()
             .map_or("".to_string(), |c: char| c.to_string())
     }
+
+    fn draw_as_child_of(&self, parent: &mut ChildBuilder<'_, '_, '_>, asset_server: &Res<AssetServer>) {
+        let mut txt_style = TEXT_STYLE.clone();
+        txt_style.font = asset_server.load("fonts/FiraSans-Bold.ttf");
+        parent
+            .spawn(
+                ButtonBundle {
+                    style: TILE_STYLE.clone(),
+                    background_color: self.color().into(),
+                    ..default()
+                }
+            )
+            .with_children(|parent| {
+                parent.spawn(TextBundle::from_section(
+                    self.text(),
+                    txt_style.clone()
+                ));
+            });
+    }
 }
 
-// TODO: Also need a nice interface to input a word...
-
-// TODO: Should have a 'resource' to track the game state... like what the target word is
-// TODO: Note that drawing logic is totally independent of the actual components being tracked
-// Real game example:
-// https://github.com/bevyengine/bevy/blob/v0.8.1/examples/games/breakout.rs
-
-
-
 #[derive(Resource, Debug, Clone, Copy)]
-struct Grid {
+struct Game {
     tiles: [[Tile; 5]; 5],
     answer: [char; 5],
     row: usize, // 0..=4
@@ -121,21 +130,21 @@ struct Grid {
     done: bool
 }
 
-impl Grid {
-    pub fn new(answer: [char; 5]) -> Grid {
-        Grid {
+impl Game {
+    pub fn new(answer: [char; 5]) -> Game {
+        Game {
             tiles: [[Tile::Blank; 5]; 5],
             row: 0,
             col: 0,
-            // holy dammit christmas
+            // I am regretting not using Vecs
             answer: answer.iter().map(|x| x.clone().to_ascii_uppercase()).collect::<Vec<_>>().try_into().unwrap(),
             done: false
         }
     }
 
-    /// Nuke the grid w/ a new word and start over
+    /// Nuke the game w/ a new word and start over
     pub fn reset(&mut self, answer: [char; 5]) {
-        *self = Grid::new(answer)
+        *self = Game::new(answer)
     }
 
     /// Submit an entire row, return indicates if successful
@@ -158,6 +167,7 @@ impl Grid {
         if self.row < 4 {
             self.row += 1;
         }
+        self.col = 0;
         true
     }
 
@@ -171,10 +181,10 @@ impl Grid {
     }
 
     pub fn delete_char(&mut self) {
+        self.tiles[self.row][self.col].delete();
         if self.done || self.col == 0 {
             return
         }
-        self.tiles[self.row][self.col].delete();
         self.col -= 1
     }
 
@@ -185,16 +195,6 @@ impl Grid {
     pub fn lost(&self) -> bool {
         self.done && !self.won()
     }
-
-    /// Last row typed, extended w/ zero bytes if incomplete
-    fn current_row_chars(&self) -> [char; 5] {
-        let r = min(self.row as usize, 4);
-        self.tiles[r]
-            .iter()
-            .map(|x| x.get_chr().unwrap_or_default())
-            .collect::<Vec<_>>().try_into().expect("oh no")
-    }
-
 }
 
 
@@ -202,59 +202,25 @@ fn camera_setup(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
 }
 
-// fn add_tile(mut commands: Commands) {
-//    commands
-//         .spawn(
-//             ButtonBundle {
-//                 style: TILE_STYLE.clone(),
-//                 background_color: Tile::Blank.color().into(),
-//                 //background_color: Tile::Correct(b'A').color().into(),
-//                 ..default()
-//             }
-//         );
-// }
-
-fn add_tile(mut commands: Commands) {
-   commands
-        .spawn(
-            NodeBundle {
-                style: Style {
-                    size: Size::new(Val::Percent(50.0), Val::Percent(50.0)),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },
-                background_color: Color::BLACK.into(),
-                ..default()
-            })
-        .with_children(|parent| {
-            parent.spawn(
-            ButtonBundle {
-                style: TILE_STYLE.clone(),
-                background_color: Tile::Correct(b'A' as char).color().into(),
-                ..default()
-            });  
-        });
-}
-
-// Could also have query: Query<&Tile, With<Other>> for things
-// that are spawned together (like, all people with a Name or something)
-fn look_at_tiles(mut query: Query<&mut Tile>) {
-    for tile in query.iter() {
-        println!("TILE: {:?}", tile);
+// Handle keyboard input
+fn handle_input(kbd_input: Res<Input<KeyCode>>, mut game: ResMut<Game>) {
+    if game.done { return }
+    for code in kbd_input.get_just_released() {
+        match code {
+            KeyCode::Return => {game.submit_row();},
+            KeyCode::Back   => {game.delete_char();},
+            k if *k >= KeyCode::A && *k <= KeyCode::Z => {
+                // HACK: Yes, we're using reflection. Yes, it's gross.
+                game.submit_char(k.variant_name().chars().next().expect("unnamed keycode variant") as char);
+            },
+            KeyCode::Escape => {game.reset(pick_word());},
+            _ => ()
+        }   
     }
 }
 
-fn look_at_grid(mut grid: Res<Grid>) {
-    println!("GRID: {:?}", grid);
-}
-
-// TODO left off here: want to render and de-render all tiles when certain events occur.
-fn spawn_grid(mut commands: Commands, grid: Res<Grid>, asset_server: Res<AssetServer>) {
-    
-    let mut txt_style = TEXT_STYLE.clone();
-    txt_style.font = asset_server.load("fonts/FiraSans-Bold.ttf");
-
+// Create a placeholder nodebundle for the game board
+fn spawn_game_board(mut commands: Commands) {
     commands
       .spawn((
         NodeBundle {
@@ -267,88 +233,81 @@ fn spawn_grid(mut commands: Commands, grid: Res<Grid>, asset_server: Res<AssetSe
             },
             background_color: Color::BLACK.into(),
             ..default()
-        }
-    ))
-    .with_children(|parent| {
-        for row in &grid.tiles {
-            // Bundle containing each row of the werdol board
-            parent.spawn((
-                NodeBundle {
-                    style: Style {
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::Center,
-                        justify_content: JustifyContent::Center,
-                        flex_wrap: FlexWrap::Wrap,
-                        size: Size::new(Val::Percent(100.0), Val::Percent(20.0)),
-                        ..default()
-                    },
-                    background_color: Color::BLACK.into(),
-                    ..default()
-                }
-            ))
-            .with_children(|parent| {
-                 parent.spawn((
-                     NodeBundle {
-                         style: Style {
-                             flex_direction: FlexDirection::Row,
-                             align_items: AlignItems::Center,
-                             justify_content: JustifyContent::Center,
-                             size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
-                             ..default()
-                         },
-                         background_color: Color::BLACK.into(),
-                         ..default()
-                     }))
-                .with_children(|parent| {
-                    for tile in row {
-                        parent.spawn((
-                            ButtonBundle {
-                                style: TILE_STYLE.clone(),
-                                background_color: tile.color().into(),
-                                ..default()
-                            })
-                        )
-                        .with_children(|parent| {
-                            parent.spawn(TextBundle::from_section(
-                                tile.text(),
-                                txt_style.clone()
-                            ));
-                        });
-                    }
-                });
-             });
-        }
-    });
+        },
+        GameBoard
+    ));
 }
 
-// TODO
-// fn despawn_grid(mut commands: Commands)
+fn redraw_tiles(mut commands: Commands, game: Res<Game>, asset_server: Res<AssetServer>, query: Query<Entity, With<GameBoard>>) {
+    // TODO: Should probably handle the assetserver stuff here, no need to repeat font stuff
+    for e in query.iter() {
+        let mut entity_cmds = commands.entity(e);
+        entity_cmds.despawn_descendants();
+        entity_cmds.with_children(|parent| {
+            for row in &game.tiles {
+                // Bundle containing each row of the werdol board
+                parent.spawn(
+                    NodeBundle {
+                        style: Style {
+                            flex_direction: FlexDirection::Column,
+                            align_items: AlignItems::Center,
+                            justify_content: JustifyContent::Center,
+                            flex_wrap: FlexWrap::Wrap,
+                            size: Size::new(Val::Percent(100.0), Val::Percent(20.0)),
+                            ..default()
+                        },
+                        background_color: Color::BLACK.into(),
+                        ..default()
+                    }
+                )
+                    .with_children(|parent| {
+                        parent.spawn(
+                            NodeBundle {
+                                style: Style {
+                                    flex_direction: FlexDirection::Row,
+                                    align_items: AlignItems::Center,
+                                    justify_content: JustifyContent::Center,
+                                    size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                                    ..default()
+                                },
+                                background_color: Color::BLACK.into(),
+                                ..default()
+                            })
+                            .with_children(|parent| {
+                                for tile in row {
+                                    tile.draw_as_child_of(parent, &asset_server);
+                                }
+                            });
+                    });
+            }
+        });
+    }
+}
 
 fn pick_word() -> [char; 5] {
     rand::thread_rng()
-        .sample_iter(&Alphanumeric)
+        .sample_iter(Uniform::new(0u8, 26))
         .take(5)
-        .map(char::from)
+        .map(|offset| char::from('A' as u8 + offset))
         .collect::<Vec<_>>()
         .try_into()
-        .expect("random word generation failed (for some reason)")
+        .expect("unable to build random word")
 }
 
 fn main() {
-    let mut grid = Grid::new(pick_word());
-    for _ in (0..5) {
-        grid.submit_char('c');
-    }
-    grid.submit_row();
+    let word = pick_word();
+    // TODO: add troll mode and a "real" wordlist to use
+    println!("The answer is {:?} (you _cheater_)", word);
+    let mut game = Game::new(word);
+    game.submit_row();
     App::new()
         .add_plugins(DefaultPlugins)
-        .insert_resource(ClearColor(Color::GREEN.into()))
-        .insert_resource(grid)
+        .insert_resource(ClearColor(Color::BLACK.into()))
+        .insert_resource(game)
         .add_startup_system(camera_setup)
-        .add_startup_system(spawn_grid)
-        .add_system(look_at_tiles)
-        .add_system(bevy::window::close_on_esc)
-        //.add_startup_system(add_tile)
-        //.add_system(look_at_grid)
+        .add_startup_system(spawn_game_board)
+        .add_system(redraw_tiles)
+        .add_system(handle_input)
+        //.add_system(bevy::window::close_on_esc)
         .run();
 }
