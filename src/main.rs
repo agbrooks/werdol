@@ -11,8 +11,8 @@ use derive_more::TryInto;
 
 lazy_static! {
     static ref TILE_STYLE: Style = Style {
-        size: Size::new(Val::Percent(96.0), Val::Percent(96.0)),
-        margin: UiRect::all(Val::Percent(4.0)),
+        size: Size::new(Val::Percent(90.0), Val::Percent(90.0)),
+        margin: UiRect::all(Val::Percent(1.0)),
         justify_content: JustifyContent::Center,
         align_items: AlignItems::Center,
         ..default()
@@ -185,7 +185,8 @@ impl Game {
         if self.done || self.col == 0 {
             return
         }
-        self.col -= 1
+        self.col -= 1;
+        self.tiles[self.row][self.col].delete();
     }
 
     pub fn won(&self) -> bool {
@@ -205,7 +206,7 @@ fn camera_setup(mut commands: Commands) {
 // Handle keyboard input
 fn handle_input(kbd_input: Res<Input<KeyCode>>, mut game: ResMut<Game>) {
     if game.done { return }
-    for code in kbd_input.get_just_released() {
+    for code in kbd_input.get_just_pressed() {
         match code {
             KeyCode::Return => {game.submit_row();},
             KeyCode::Back   => {game.delete_char();},
