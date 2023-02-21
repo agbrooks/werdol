@@ -1,8 +1,18 @@
+<<<<<<< HEAD
 use core::convert::TryInto;
 use std::cmp::min;
 
 use bevy::{prelude::*, reflect::Enum};
 use rand::{distributions::Uniform, Rng};
+=======
+use std::cmp::{min, max};
+
+use bevy::prelude::*;
+use bevy::sprite::MaterialMesh2dBundle;
+use core::convert::TryInto;
+
+use rand::{distributions::Alphanumeric, Rng};
+>>>>>>> 37480eb (Get a wordle board drawing (badly))
 
 extern crate derive_more;
 #[macro_use]
@@ -12,7 +22,12 @@ use derive_more::TryInto;
 lazy_static! {
     static ref TILE_STYLE: Style = Style {
         size: Size::new(Val::Percent(90.0), Val::Percent(90.0)),
+<<<<<<< HEAD
         margin: UiRect::all(Val::Percent(1.0)),
+=======
+        //size: Size::AUTO,
+        margin: UiRect::all(Val::Percent(4.0)),
+>>>>>>> 37480eb (Get a wordle board drawing (badly))
         justify_content: JustifyContent::Center,
         align_items: AlignItems::Center,
         ..default()
@@ -24,6 +39,7 @@ lazy_static! {
     };
 }
 
+<<<<<<< HEAD
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 enum AppState {
     /// Game is ongoing
@@ -46,6 +62,14 @@ struct Notification;
 
 /// A tile on the Werdol board
 #[derive(Component, Clone, Copy, TryInto, Debug, Eq, PartialEq, Hash)]
+=======
+// stupid, distinctive tag to use
+#[derive(Component)]
+struct Grimbo {}
+
+/// A tile on the Werdol board
+#[derive(Component, Clone, Copy, TryInto, Debug)]
+>>>>>>> 37480eb (Get a wordle board drawing (badly))
 #[try_into(owned, ref, ref_mut)]
 enum Tile {
     /// Correct letter in the correct position
@@ -65,9 +89,14 @@ impl Default for Tile {
     fn default() -> Self { Self::Blank }
 }
 
+<<<<<<< HEAD
 /// A single tile on the Werdol board.
 impl Tile {
     // Forget a proposed character for this tile.
+=======
+impl Tile {
+    // Forget a prposed character for this tile.
+>>>>>>> 37480eb (Get a wordle board drawing (badly))
     fn delete(&mut self) {
         *self = Self::Blank
     }
@@ -91,9 +120,14 @@ impl Tile {
     // Ask a tile how it should be displayed
     fn color(&self) -> Color {
         match self {
+<<<<<<< HEAD
             Self::Correct(_)   => Color::rgb(0.0, 0.5, 0.0),
             Self::Misplaced(_) => Color::rgb(0.5, 0.5, 0.0),
             Self::Missing(_)   => Color::rgb(0.25, 0.25, 0.25),
+=======
+            Self::Correct(_)   => Color::GREEN,
+            Self::Misplaced(_) => Color::YELLOW,
+>>>>>>> 37480eb (Get a wordle board drawing (badly))
             _                  => Color::GRAY
         }
     }
@@ -116,6 +150,7 @@ impl Tile {
             .try_into()
             .map_or("".to_string(), |c: char| c.to_string())
     }
+<<<<<<< HEAD
 
     fn draw_as_child_of(&self, parent: &mut ChildBuilder<'_, '_, '_>, asset_server: &Res<AssetServer>) {
         let mut txt_style = TEXT_STYLE.clone();
@@ -139,6 +174,21 @@ impl Tile {
 
 #[derive(Resource, Debug, Clone, Copy)]
 struct Game {
+=======
+}
+
+// TODO: Also need a nice interface to input a word...
+
+// TODO: Should have a 'resource' to track the game state... like what the target word is
+// TODO: Note that drawing logic is totally independent of the actual components being tracked
+// Real game example:
+// https://github.com/bevyengine/bevy/blob/v0.8.1/examples/games/breakout.rs
+
+
+
+#[derive(Resource, Debug, Clone, Copy)]
+struct Grid {
+>>>>>>> 37480eb (Get a wordle board drawing (badly))
     tiles: [[Tile; 5]; 5],
     answer: [char; 5],
     row: usize, // 0..=4
@@ -146,6 +196,7 @@ struct Game {
     done: bool
 }
 
+<<<<<<< HEAD
 impl Game {
     pub fn new(answer: [char; 5]) -> Game {
         Game {
@@ -153,14 +204,29 @@ impl Game {
             row: 0,
             col: 0,
             // I am regretting not using Vecs
+=======
+impl Grid {
+    pub fn new(answer: [char; 5]) -> Grid {
+        Grid {
+            tiles: [[Tile::Blank; 5]; 5],
+            row: 0,
+            col: 0,
+            // holy dammit christmas
+>>>>>>> 37480eb (Get a wordle board drawing (badly))
             answer: answer.iter().map(|x| x.clone().to_ascii_uppercase()).collect::<Vec<_>>().try_into().unwrap(),
             done: false
         }
     }
 
+<<<<<<< HEAD
     /// Nuke the game w/ a new word and start over
     pub fn reset(&mut self, answer: [char; 5]) {
         *self = Game::new(answer)
+=======
+    /// Nuke the grid w/ a new word and start over
+    pub fn reset(&mut self, answer: [char; 5]) {
+        *self = Grid::new(answer)
+>>>>>>> 37480eb (Get a wordle board drawing (badly))
     }
 
     /// Submit an entire row, return indicates if successful
@@ -183,7 +249,10 @@ impl Game {
         if self.row < 4 {
             self.row += 1;
         }
+<<<<<<< HEAD
         self.col = 0;
+=======
+>>>>>>> 37480eb (Get a wordle board drawing (badly))
         true
     }
 
@@ -196,6 +265,7 @@ impl Game {
         self.col = min(self.col + 1, 4)
     }
 
+<<<<<<< HEAD
     // Retract a proposed character, so long as it's still unsubmitted
     pub fn delete_char(&mut self) {
         self.tiles[self.row][self.col].delete();
@@ -208,12 +278,36 @@ impl Game {
 
     pub fn won(&self) -> bool {
         // FIXME: Always seems to return false, huh
+=======
+    pub fn delete_char(&mut self) {
+        if self.done || self.col == 0 {
+            return
+        }
+        self.tiles[self.row][self.col].delete();
+        self.col -= 1
+    }
+
+    pub fn won(&self) -> bool {
+>>>>>>> 37480eb (Get a wordle board drawing (badly))
         self.tiles[self.row].iter().all(|x| x.is_correct())
     }
 
     pub fn lost(&self) -> bool {
         self.done && !self.won()
     }
+<<<<<<< HEAD
+=======
+
+    /// Last row typed, extended w/ zero bytes if incomplete
+    fn current_row_chars(&self) -> [char; 5] {
+        let r = min(self.row as usize, 4);
+        self.tiles[r]
+            .iter()
+            .map(|x| x.get_chr().unwrap_or_default())
+            .collect::<Vec<_>>().try_into().expect("oh no")
+    }
+
+>>>>>>> 37480eb (Get a wordle board drawing (badly))
 }
 
 
@@ -221,6 +315,7 @@ fn camera_setup(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
 }
 
+<<<<<<< HEAD
 // Handle keyboard input
 fn handle_game_input(kbd_input: Res<Input<KeyCode>>, mut game: ResMut<Game>, mut state: ResMut<State<AppState>>) {
     if game.done { return }
@@ -262,6 +357,61 @@ fn restart_on_keypress(kbd_input: Res<Input<KeyCode>>, mut game: ResMut<Game>, m
 
 // Create a placeholder nodebundle for the game board
 fn spawn_game_board(mut commands: Commands) {
+=======
+// fn add_tile(mut commands: Commands) {
+//    commands
+//         .spawn(
+//             ButtonBundle {
+//                 style: TILE_STYLE.clone(),
+//                 background_color: Tile::Blank.color().into(),
+//                 //background_color: Tile::Correct(b'A').color().into(),
+//                 ..default()
+//             }
+//         );
+// }
+
+fn add_tile(mut commands: Commands) {
+   commands
+        .spawn(
+            NodeBundle {
+                style: Style {
+                    size: Size::new(Val::Percent(50.0), Val::Percent(50.0)),
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },
+                background_color: Color::BLACK.into(),
+                ..default()
+            })
+        .with_children(|parent| {
+            parent.spawn(
+            ButtonBundle {
+                style: TILE_STYLE.clone(),
+                background_color: Tile::Correct(b'A' as char).color().into(),
+                ..default()
+            });  
+        });
+}
+
+// Could also have query: Query<&Tile, With<Other>> for things
+// that are spawned together (like, all people with a Name or something)
+fn look_at_tiles(mut query: Query<&mut Tile>) {
+    for tile in query.iter() {
+        println!("TILE: {:?}", tile);
+    }
+}
+
+fn look_at_grid(mut grid: Res<Grid>) {
+    println!("GRID: {:?}", grid);
+}
+
+// TODO left off here: want to render and de-render all tiles when certain events occur.
+fn spawn_grid(mut commands: Commands, grid: Res<Grid>, asset_server: Res<AssetServer>) {
+    
+    let mut txt_style = TEXT_STYLE.clone();
+    txt_style.font = asset_server.load("fonts/FiraSans-Bold.ttf");
+
+>>>>>>> 37480eb (Get a wordle board drawing (badly))
     commands
       .spawn((
         NodeBundle {
@@ -274,6 +424,7 @@ fn spawn_game_board(mut commands: Commands) {
             },
             background_color: Color::BLACK.into(),
             ..default()
+<<<<<<< HEAD
         },
         GameBoard
     ));
@@ -428,5 +579,90 @@ fn main() {
         .add_system_set(
             SystemSet::on_update(AppState::Lost).with_system(restart_on_keypress)
         )
+=======
+        }
+    ))
+    .with_children(|parent| {
+        for row in &grid.tiles {
+            // Bundle containing each row of the werdol board
+            parent.spawn((
+                NodeBundle {
+                    style: Style {
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        justify_content: JustifyContent::Center,
+                        flex_wrap: FlexWrap::Wrap,
+                        size: Size::new(Val::Percent(100.0), Val::Percent(20.0)),
+                        ..default()
+                    },
+                    background_color: Color::BLACK.into(),
+                    ..default()
+                }
+            ))
+            .with_children(|parent| {
+                 parent.spawn((
+                     NodeBundle {
+                         style: Style {
+                             flex_direction: FlexDirection::Row,
+                             align_items: AlignItems::Center,
+                             justify_content: JustifyContent::Center,
+                             size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                             ..default()
+                         },
+                         background_color: Color::BLACK.into(),
+                         ..default()
+                     }))
+                .with_children(|parent| {
+                    for tile in row {
+                        parent.spawn((
+                            ButtonBundle {
+                                style: TILE_STYLE.clone(),
+                                background_color: tile.color().into(),
+                                ..default()
+                            })
+                        )
+                        .with_children(|parent| {
+                            parent.spawn(TextBundle::from_section(
+                                tile.text(),
+                                txt_style.clone()
+                            ));
+                        });
+                    }
+                });
+             });
+        }
+    });
+}
+
+// TODO
+// fn despawn_grid(mut commands: Commands)
+
+fn pick_word() -> [char; 5] {
+    rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(5)
+        .map(char::from)
+        .collect::<Vec<_>>()
+        .try_into()
+        .expect("random word generation failed (for some reason)")
+}
+
+fn main() {
+    let mut grid = Grid::new(pick_word());
+    for _ in (0..5) {
+        grid.submit_char('c');
+    }
+    grid.submit_row();
+    App::new()
+        .add_plugins(DefaultPlugins)
+        .insert_resource(ClearColor(Color::GREEN.into()))
+        .insert_resource(grid)
+        .add_startup_system(camera_setup)
+        .add_startup_system(spawn_grid)
+        .add_system(look_at_tiles)
+        .add_system(bevy::window::close_on_esc)
+        //.add_startup_system(add_tile)
+        //.add_system(look_at_grid)
+>>>>>>> 37480eb (Get a wordle board drawing (badly))
         .run();
 }
