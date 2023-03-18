@@ -24,13 +24,28 @@ lazy_static! {
     };
 }
 
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+enum AppState {
+    /// Game is ongoing
+    Playing,
+    /// Game completed (won)
+    Won,
+    /// Game completed (lost)
+    Lost
+}
+
 // "Tag component" to figure out where in the NodeBundle tree the game board
 // entity actually lives
 #[derive(Component)]
 struct GameBoard;
 
+// "Tag component" to identify part of NodeBundle tree containing a
+// win/loss notification
+#[derive(Component)]
+struct Notification;
+
 /// A tile on the Werdol board
-#[derive(Component, Clone, Copy, TryInto, Debug)]
+#[derive(Component, Clone, Copy, TryInto, Debug, Eq, PartialEq, Hash)]
 #[try_into(owned, ref, ref_mut)]
 enum Tile {
     /// Correct letter in the correct position
@@ -50,6 +65,7 @@ impl Default for Tile {
     fn default() -> Self { Self::Blank }
 }
 
+/// A single tile on the Werdol board.
 impl Tile {
     // Forget a proposed character for this tile.
     fn delete(&mut self) {
@@ -180,6 +196,7 @@ impl Game {
         self.col = min(self.col + 1, 4)
     }
 
+    // Retract a proposed character, so long as it's still unsubmitted
     pub fn delete_char(&mut self) {
         self.tiles[self.row][self.col].delete();
         if self.done || self.col == 0 {
@@ -190,6 +207,7 @@ impl Game {
     }
 
     pub fn won(&self) -> bool {
+        // FIXME: Always seems to return false, huh
         self.tiles[self.row].iter().all(|x| x.is_correct())
     }
 
@@ -204,7 +222,7 @@ fn camera_setup(mut commands: Commands) {
 }
 
 // Handle keyboard input
-fn handle_input(kbd_input: Res<Input<KeyCode>>, mut game: ResMut<Game>) {
+fn handle_game_input(kbd_input: Res<Input<KeyCode>>, mut game: ResMut<Game>, mut state: ResMut<State<AppState>>) {
     if game.done { return }
     for code in kbd_input.get_just_pressed() {
         match code {
@@ -216,7 +234,29 @@ fn handle_input(kbd_input: Res<Input<KeyCode>>, mut game: ResMut<Game>) {
             },
             KeyCode::Escape => {game.reset(pick_word());},
             _ => ()
-        }   
+        }
+    }
+    if game.done {
+        if game.won() {
+            state.overwrite_replace(AppState::Won);
+        } else {
+            state.overwrite_replace(AppState::Lost);
+        }
+    }
+}
+
+fn restart_on_keypress(kbd_input: Res<Input<KeyCode>>, mut game: ResMut<Game>, mut state: ResMut<State<AppState>>) {
+    for _ in kbd_input.get_just_pressed() {
+        // HACK: For reasons I do not understand, the enter keypress that was used for the previous state will
+        // be sent to this function.
+        //
+        // In this function, we reset the game on the first received, then switch game states on the second.
+        // I should revisit this.
+        if game.done {
+            game.reset(pick_word());
+        } else {
+            state.overwrite_replace(AppState::Playing);
+        }
     }
 }
 
@@ -237,6 +277,60 @@ fn spawn_game_board(mut commands: Commands) {
         },
         GameBoard
     ));
+}
+
+// TODO should find a nice way to avoid having to explicitly pass the commands/asset server
+fn make_notification(msg: impl Into<String>, color: Color, mut commands: Commands, asset_server: Res<AssetServer>) {
+    let mut txt_style = TEXT_STYLE.clone();
+    txt_style.font = asset_server.load("fonts/FiraSans-Bold.ttf");
+    commands
+        .spawn((
+            NodeBundle {
+                style: Style {
+                    size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                    justify_content: JustifyContent::Center,
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },
+                background_color: color.into(),
+                ..default()
+            },
+            Notification
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                TextBundle::from_sections([
+                    TextSection::new(
+                        msg, txt_style.clone()
+                    ),
+                    TextSection::new(
+                        "(press any key)", txt_style.clone()
+                    )
+                ]))
+            );
+        });
+}
+
+fn clear_notification(mut commands: Commands, mut query: Query<Entity, With<Notification>>) {
+    for e in query.iter_mut() {
+        commands.entity(e).despawn_descendants();
+        commands.entity(e).despawn();
+    }
+}
+
+fn notify_won(mut commands: Commands, asset_server: Res<AssetServer>) {
+    make_notification("You won!\n", Color::DARK_GREEN, commands, asset_server)
+}
+
+fn notify_lost(mut commands: Commands, asset_server: Res<AssetServer>, game: Res<Game>) {
+    let s: String = game.answer.iter().collect();
+    make_notification(format!("You lose, doofus!\nThe word was '{}'.\n", s), Color::CRIMSON, commands, asset_server)
+}
+
+fn hide_board(mut commands: Commands, query: Query<Entity, With<GameBoard>>) {
+    for e in query.iter() {
+        commands.entity(e).despawn_descendants();
+    }
 }
 
 fn redraw_tiles(mut commands: Commands, game: Res<Game>, asset_server: Res<AssetServer>, query: Query<Entity, With<GameBoard>>) {
@@ -307,8 +401,32 @@ fn main() {
         .insert_resource(game)
         .add_startup_system(camera_setup)
         .add_startup_system(spawn_game_board)
-        .add_system(redraw_tiles)
-        .add_system(handle_input)
-        //.add_system(bevy::window::close_on_esc)
+        .add_state(AppState::Playing)
+        .add_system_set(
+            SystemSet::on_enter(AppState::Playing)
+                .with_system(clear_notification)
+                .with_system(redraw_tiles)
+        )
+        .add_system_set(
+            SystemSet::on_update(AppState::Playing)
+                .with_system(handle_game_input)
+                .with_system(redraw_tiles)
+        )
+        .add_system_set(
+            SystemSet::on_exit(AppState::Playing)
+                .with_system(hide_board)
+        )
+        .add_system_set(
+            SystemSet::on_enter(AppState::Won).with_system(notify_won)
+        )
+        .add_system_set(
+            SystemSet::on_update(AppState::Won).with_system(restart_on_keypress)
+        )
+        .add_system_set(
+            SystemSet::on_enter(AppState::Lost).with_system(notify_lost)
+        )
+        .add_system_set(
+            SystemSet::on_update(AppState::Lost).with_system(restart_on_keypress)
+        )
         .run();
 }
