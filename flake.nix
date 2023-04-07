@@ -54,6 +54,10 @@
         cp -R assets $out/bin/
         wrapProgram $out/bin/werdol --prefix 'LD_LIBRARY_PATH' ':' '${pkgs.vulkan-loader}/lib'
         '';
+
+        # NB: will need some tweaks for MacOS
+        meta.broken = pkgs.stdenv.isDarwin;
+        passthru.exePath = "/bin/werdol";
       };
 
       devShell = with pkgs; mkShell {
@@ -70,6 +74,11 @@
         # when attempting to find a GPU driver. Give it a lil push.
         LD_LIBRARY_PATH="${pkgs.vulkan-loader}/lib";
         inherit LIBCLANG_PATH;
+      };
+
+      # Enables 'nix run'.
+      apps.default = flake-utils.lib.mkApp {
+        drv = self.packages.${system}.default;
       };
     }
   );
