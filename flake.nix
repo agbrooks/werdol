@@ -49,7 +49,11 @@
 
         LD_LIBRARY_PATH="${pkgs.vulkan-loader}/lib";
 
-        #XDG_DATA_DIRS = "/run/current-system/sw/share";
+        # definitely *shouldn't* go in bin, but eh, whatever
+        postInstall = ''
+        cp -R assets $out/bin/
+        wrapProgram $out/bin/werdol --prefix 'LD_LIBRARY_PATH' ':' '${pkgs.vulkan-loader}/lib'
+        '';
       };
 
       devShell = with pkgs; mkShell {
@@ -61,7 +65,6 @@
         ];
         RUST_SRC_PATH = rustPlatform.rustLibSrc;
         RUST_BACKTRACE = "1";
-        #XDG_DATA_DIRS = "/run/current-system/sw/share";
 
         # HACK: wgpu winds up picking a strange assortment of paths to search
         # when attempting to find a GPU driver. Give it a lil push.
